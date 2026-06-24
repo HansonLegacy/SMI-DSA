@@ -1,0 +1,28 @@
+exp_name: origin_bim_test
+mode: benchmark
+resume: pretrained/bim_vfi.pth  # 你的微调权重
+model:
+  name: bim_vfi
+  args:
+    pyr_level: 3
+    feat_channels: 32
+
+benchmark_dataset:
+  name:
+    - xiehe_3_datasplit  # 你的数据集名称
+  args:
+    root_path:
+      - /mnt/mydrive/data/0627_给超算数据集/脑血管疾病_2D/2D_3_xiehe/test  # 测试数据路径
+    split:
+      - [test]
+    pyr_level:
+      - 3
+  # loader:
+  #   batch_size: 8
+  #   num_workers: 4
+  save_imgs: False
+
+max_epoch: 400
+seed: 1234
+
+dist_url: env://

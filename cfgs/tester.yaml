@@ -1,0 +1,78 @@
+# 统一测试配置文件
+
+exp_name: Test_aaai_in5_bimvfi_best_full_seq # Test_bishe_in5_mostdsa
+mode: test
+
+# 分布式训练相关配置
+distributed: false
+gpu: 0
+
+# 多GPU配置
+num_gpus: 1  # 使用GPU数量
+
+# 数据集配置
+test_dataset:
+  name: video_sequence_global_context_folder
+  args:
+    root_path: /mnt/mydrive/data/0627_给超算数据集/脑血管疾病_3D_3/3D_5_xiehe/3D_xiehe_noblack_seq/test_512
+    split: test
+    interp_num: 5
+    enumerate_all_targets: true
+    eval_size: [512, 512]
+    val_test_patch_mode: resize
+    clip_length: 4
+    pad_to_clip_length: true
+    output_pair_fields: true
+    val_ratio: 0.05
+  loader:
+    batch_size: 8
+    num_workers: 4
+  save_imgs: false
+
+
+# 模型配置
+models:
+  - name: bim_vfi
+    type: bimvfi
+    resume: pretrained/bim_vfi_finetune_3dxiehe_train_noblack_in5_ep1.pth  # bimpiror_ep5_best.pth  bim_vfi_finetune_3dxiehe_train_noblack_in5_ep1.pth
+    args:
+      pyr_level: 3 
+      feat_channels: 32
+
+      use_transunet: false
+      transunet_pretrained: pretrained/transunet/R50+ViT-B_16.npz
+
+      use_bim_prior_predictor: false
+      bim_prior_hidden_channels: 32
+      bim_prior_use_img_diff: false
+      bim_prior_use_last_state: false
+      freeze_bim_prior: false
+
+  - name: most_dsa
+    type: mostdsa
+    resume: /home/jiaxuan/tmp_model/MoSt-DSA/weights/checkpoints/Inf5_finetune--Best.pkl
+    args:
+      F: 32
+      lambda_range: local
+      depth: [2, 2, 2, 4]
+      TTA: false
+
+  - name: garamost
+    type: garamost
+    resume: /home/jiaxuan/tmp_model/GaraMoSt/weights/checkpoints/GaraMoSt_5frame--epoch2.pkl
+    args:
+      F: 32
+      lambda_range: local
+      depth: [2, 2, 2, 2, 4, 4]
+      lambda_r: [7, 29]
+      TTA: false
+
+
+# 测试相关配置
+test:
+  batch_size: 4
+  num_workers: 4
+  save_imgs: false
+  save_path: test_outputs
+
+seed: 1234

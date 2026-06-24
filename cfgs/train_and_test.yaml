@@ -1,0 +1,255 @@
+exp_name: video_sequence_global_context
+mode: train
+
+model:
+  name: bim_vfi
+  args:
+    # --------------------------------------------------------------------------
+    # Core backbone
+    # --------------------------------------------------------------------------
+    pyr_level: 3
+    feat_channels: 32
+
+    # --------------------------------------------------------------------------
+    # Teacher/KDVCF branch
+    # Default in code is true for backward compatibility with older configs.
+    # This experiment only uses reconstruction losses, so the teacher path is off.
+    # --------------------------------------------------------------------------
+    use_teacher_branch: false
+
+    # --------------------------------------------------------------------------
+    # Legacy pair-only BiM prior path
+    # Keep this off when using the new MTMC conditioner below.
+    # --------------------------------------------------------------------------
+    use_bim_prior_predictor: false
+
+    # --------------------------------------------------------------------------
+    # Legacy sequence-context branch from the old video-sequence pipeline
+    # This is a separate path from LTCE/GTME and should stay off here.
+    # --------------------------------------------------------------------------
+    use_video_sequence_context: false
+
+    # --------------------------------------------------------------------------
+    # Local temporal context branch (LTCE)
+    # local_clip -> MFE/CFE -> LTCE -> motion_context_pyr + detail_context_pyr
+    # --------------------------------------------------------------------------
+    use_local_fine_context: true
+    use_ltce: true
+    # Legacy naming: this switch now controls whether LTCE motion context is
+    # allowed to participate in the motion-conditioning path.
+    use_local_motion_context_for_bim_prior: true
+    # Allow LTCE detail context to be injected into the reconstruction network.
+    use_local_detail_context_for_sn: true
+    local_fine_context:
+      # Number of frames in the target-centered local window.
+      clip_length: 4
+      # Run the local window through the motion feature encoder.
+      run_mfe_on_local_clip: true
+      # Run the local window through the detail/context feature encoder.
+      run_cfe_on_local_clip: true
+      # Current project backbone exposes 3 pyramid levels.
+      num_pyramid_levels: 3
+      encoder:
+        name: ltce
+        args:
+          feat_channels: 32
+          temporal_sigma: 2.0
+          channel_multipliers: [1, 2, 4]
+          # Coarse scales share motion/detail parameters.
+          coarse_shared_levels: [2]
+          # Fine scales keep separate motion/detail parameters.
+          fine_separate_levels: [0, 1]
+      # Documentation fields mirroring the encoder args above.
+      share_coarse_parameters: true
+      coarse_shared_levels: [2]
+      fine_separate_levels: [0, 1]
+      # Route LTCE motion context into the motion-conditioning path.
+      motion_to_bim_prior: true
+      motion_to_mtmc: true
+      # Route LTCE detail context into TCAR / SN.
+      detail_to_sn: true
+
+    # --------------------------------------------------------------------------
+    # Global temporal memory branch (GTME)
+    # sparse_sequence/global_clip -> GTME -> global context pyramid
+    # --------------------------------------------------------------------------
+    use_global_memory_context: true
+    use_gtme: true
+    # Inject GTME output into the reconstruction network.
+    use_global_memory_for_sn: true
+    global_memory_context:
+      # Use the sparse anchor sequence as global memory input.
+      source: sparse_anchors
+      # Number of closest frames used for GTME local read.
+      local_window_size: 6
+      # Route GTME output into TCAR / SN.
+      memory_to_sn: true
+      # Route GTME output into MTMC.
+      memory_to_mtmc: true
+    global_memory_encoder:
+      name: gtme
+      args:
+        feat_channels: 32
+        local_window_size: 6
+        # Downsample the spatial resolution before GTME reads the global clip.
+        # 4 means H,W -> H/4,W/4 inside GTME, cutting dense GTME activations by ~16x.
+        spatial_downsample_factor: 4
+
+    # --------------------------------------------------------------------------
+    # Motion conditioner (MTMC)
+    # img0/img1 + pair features + optional LTCE/GTME context -> r, phi
+    # --------------------------------------------------------------------------
+    use_mtmc: true
+    mtmc_hidden_channels: 32
+    mtmc_use_img_diff: true
+    mtmc_use_last_state: true
+    mtmc_use_local_motion_context: true
+    mtmc_use_global_context: true
+    mtmc_pretrained: null
+    freeze_mtmc: false
+    mtmc:
+      name: mtmc
+      args:
+        hidden_channels: 32
+        feat_channels: 32
+        use_img_diff: true
+        use_state: true
+        use_local_motion_context: true
+        use_global_context: true
+
+    # --------------------------------------------------------------------------
+    # Reconstructor (TCAR)
+    # Original UNet-like reconstruction backbone + detail/global context adapters
+    # --------------------------------------------------------------------------
+    use_tcar: true
+    tcar:
+      name: tcar
+      args:
+        feat_channels: 32
+
+  # Freeze original backbone modules so training focuses on the new temporal
+  # context stack. Adjust this list if you want joint finetuning later.
+  freeze_modules: ["mfe", "cfe"]  # , "bimfn", "caun"
+
+train_dataset:
+  name: video_sequence_global_context_folder
+  args:
+    # --------------------------------------------------------------------------
+    # Data source
+    # --------------------------------------------------------------------------
+    root_path: /home/ppq5umrb/whcs-share46/LJX/3D_5_xiehe/3D_xiehe_noblack_seq/train_512
+    split: train
+
+    # --------------------------------------------------------------------------
+    # Sparse-to-dense interpolation setup
+    # interp_num = N means each sparse anchor pair supervises N middle frames.
+    # --------------------------------------------------------------------------
+    interp_num: 5
+    enumerate_all_targets: true
+
+    # --------------------------------------------------------------------------
+    # Spatial preprocessing
+    # --------------------------------------------------------------------------
+    patch_size: 224
+
+    # --------------------------------------------------------------------------
+    # Pair-centric local window settings
+    # clip_length is the local context window consumed by LTCE.
+    # --------------------------------------------------------------------------
+    clip_length: 4
+    pad_to_clip_length: true
+    output_pair_fields: true
+
+    # --------------------------------------------------------------------------
+    # Train/val split and temporal context outputs
+    # --------------------------------------------------------------------------
+    val_ratio: 0.05
+    global_context_source: sparse_anchors
+    global_context_max_frames: null
+    position_norm_mode: one_based
+    output_local_context_fields: true
+    output_sparse_sequence_fields: true
+  loader:
+    batch_size: 24
+    num_workers: 8
+
+test_dataset:
+  name: video_sequence_global_context_folder
+  args:
+    # --------------------------------------------------------------------------
+    # Data source
+    # --------------------------------------------------------------------------
+    root_path: /home/ppq5umrb/whcs-share46/LJX/3D_5_xiehe/3D_xiehe_noblack_seq/train_512
+    split: val
+
+    # --------------------------------------------------------------------------
+    # Sparse-to-dense interpolation setup
+    # --------------------------------------------------------------------------
+    interp_num: 5
+    enumerate_all_targets: true
+
+    # --------------------------------------------------------------------------
+    # Evaluation preprocessing
+    # --------------------------------------------------------------------------
+    eval_size: [512, 512]
+    val_test_patch_mode: resize
+
+    # --------------------------------------------------------------------------
+    # Pair-centric local window settings
+    # --------------------------------------------------------------------------
+    clip_length: 4
+    pad_to_clip_length: true
+    output_pair_fields: true
+
+    # --------------------------------------------------------------------------
+    # Validation split and temporal context outputs
+    # --------------------------------------------------------------------------
+    val_ratio: 0.05
+    global_context_source: sparse_anchors
+    global_context_max_frames: null
+    position_norm_mode: one_based
+    output_local_context_fields: true
+    output_sparse_sequence_fields: true
+  loader:
+    batch_size: 4
+    num_workers: 8
+  save_imgs: false
+
+optimizer:
+  name: adamW
+  args: { lr: 1.5e-4, weight_decay: 1.0e-4 }
+
+lr_scheduler:
+  name: one_cycle_lr
+  args:
+    max_lr: 5.0e-4
+    pct_start: 0.01
+    cycle_momentum: false
+    anneal_strategy: cos
+
+gradient_clip: 1
+
+loss:
+  - {
+    name: multiple_charbonnier,
+    args: { weight: 1, gamma: 0.25 }
+  }
+  - {
+    name: multiple_ternary,
+    args: { weight: 1, gamma: 0.25 }
+  }
+
+max_epoch: 400
+
+validate_every: 1
+save_every: 1
+vis_every: 100
+
+seed: 1234
+
+dist_url: env://
+
+test_before_train: false
+
+# Load an existing checkpoint as initialization.
+pretrained: pretrained/bim_vfi_finetune_3dxiehe_train_noblack_in5_ep1.pth

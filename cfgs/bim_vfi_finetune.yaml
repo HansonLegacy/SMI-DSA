@@ -1,0 +1,80 @@
+exp_name: test  # finetune_aaa_2d_triplet_3frame  # finetune_xiehe_2d_3_brain
+mode: train
+model:
+  name: bim_vfi
+  args:
+    pyr_level: 3
+    feat_channels: 32
+
+train_dataset:
+  name: xiehe_5_datasplit  # aaa_2d_triplet_3frame  # xiehe_2d_3_brain  # xiehe_2d_5_brain
+  args:
+    root_path: /mnt/mydrive/data/0627_给超算数据集/脑血管疾病_3D_3/3D_5_xiehe/train
+    split: train
+    patch_size: 224 # 用于数据增强（有数据增强时候设置，用于随机裁剪）（MoSt-DSA是320）
+  loader:
+    batch_size: 48 # 16
+    num_workers: 8 # 8
+
+test_dataset:
+  name: xiehe_5_datasplit  # AAA-2D-三元组-插3帧  # xiehe_2d_3_brain  # xiehe_2d_5_brain
+  args:
+    root_path: /mnt/mydrive/data/0627_给超算数据集/脑血管疾病_3D_3/3D_5_xiehe/train
+    split: val  # val  # 如果使用train前测，这里写test
+  loader:
+    batch_size: 24 # 32 # test模式下72到80满四卡
+    num_workers: 4  # 4
+  save_imgs: False  # False
+
+optimizer:  # 这里要与train不同，相比调低
+  name: adamW
+  args: { lr: 5.0e-5, weight_decay: 1.e-4 }  # { lr: 1.5e-4, weight_decay: 1.e-4 }
+  # args: { lr: 5.0e-5, weight_decay: 1.e-4 }  # lr调低
+
+lr_scheduler:
+  name: one_cycle_lr
+  args:
+    max_lr: 5.0e-5  # 1.5e-4  # 降低最大学习率以适应微调
+    pct_start: 0.005  # 学习率上升占ep中总step的比例（主要用于warmup）  # 0.01
+    cycle_momentum: False
+    anneal_strategy: cos
+gradient_clip: 1
+loss:
+  - {
+    name: multiple_charbonnier,  # 鲁棒L1损失
+    args: { weight: 0.5, gamma: 0.25 }  # 这个gamma是权重衰减系数（也许在微调的时候应该调低）
+  }  # weight: 1, gamma: 0.25
+  - {
+    name: multiple_ternary,  # 局部结构相似性损失
+    args: { weight: 1, gamma: 0.25 }
+  }
+  - {
+    name: photo_teacher,  # 蒸馏损失（让teacher flow逼近gt）—— 这个意味着teacher引导自身的强度
+    args: { weight: 0.5, gamma: 0.25 }
+  }
+  # - {
+  #   name: flow_distill_res,  # 光流残差蒸馏损失 —— 这个意味着学生学习teacher的强度
+  #   args: { weight: 0.005, beta: 1, gamma: 0.5 }
+  # }
+  # - {
+  #   name: flow_teacher_reg,  # 老师模型正则（平滑度） —— 这个意味着teacher自身的平滑度（maybe提升能够限制伪影（因为医学影像的稳定性，大运动少））
+  #   args: { weight: 0.005, gamma: 0.5 }
+  # }
+  # - {
+  #   name: flow_smooth_tea1,  # 光流平滑损失（对教师模型预测的光流施加平滑性约束） —— (maybe处理的是边缘的内容)
+  #   args: { weight: 0.05, gamma: 0.5, weight_type: gaussian, edge_constant: 150 }
+  # }
+max_epoch: 400  # 400
+
+validate_every: 1  # 10
+save_every: 1  # 10
+vis_every: 100 # 10
+
+seed: 1234
+
+dist_url: env://
+
+test_before_train: False # True  # False
+
+pretrained: pretrained/bim_vfi.pth # 这行是额外加的
+Z

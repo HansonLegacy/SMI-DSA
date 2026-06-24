@@ -1,0 +1,93 @@
+exp_name: bimprior_only
+mode: train
+
+model:
+  name: bim_vfi
+  args:
+    pyr_level: 3
+    feat_channels: 32
+    use_bim_prior_predictor: true
+    bim_prior_hidden_channels: 32
+    bim_prior_use_img_diff: true
+    bim_prior_use_last_state: true
+    freeze_bim_prior: false
+  # Freeze the full BiM-VFI backbone and leave only bim_prior_predictor trainable.
+  freeze_modules: ["mfe", "cfe", "caun", "sn"]  # , "bimfn"
+
+train_dataset:
+  name: xiehe_5_datasplit
+  args:
+    # Replace this path if your training data lives elsewhere.
+    root_path: /mnt/mydrive/data/0627_xiehe/3D_5_xiehe/train
+    split: train
+    patch_size: 224
+  loader:
+    batch_size: 16
+    num_workers: 8
+
+test_dataset:
+  name: xiehe_5_datasplit
+  args:
+    # Replace this path if your validation data lives elsewhere.
+    root_path: /mnt/mydrive/data/0627_xiehe/3D_5_xiehe/train
+    split: val
+  loader:
+    batch_size: 8
+    num_workers: 4
+  save_imgs: false
+
+optimizer:
+  name: adamW
+  args: { lr: 1.0e-4, weight_decay: 1.0e-4 }
+
+lr_scheduler:
+  name: one_cycle_lr
+  args:
+    max_lr: 1.0e-4
+    pct_start: 0.01
+    cycle_momentum: false
+    anneal_strategy: cos
+
+gradient_clip: 1
+
+loss:
+  # - {
+  #   name: weighted_bim,
+  #   args: {
+  #     weight: 1.0,
+  #     gamma: 0.5,
+  #     vessel_weight: 1.0,
+  #     motion_weight: 1.0,
+  #     joint_weight: 4.0,
+  #     vessel_threshold: 0.2,
+  #     motion_threshold: 0.1,
+  #     r_weight: 1.0,
+  #     phi_weight: 1.0
+  #   }
+  # }
+  - {
+    name: multiple_charbonnier,
+    args: { weight: 0.5, gamma: 0.25 }
+  }
+  - {
+    name: multiple_ternary,
+    args: { weight: 1.0, gamma: 0.25 }
+  }
+  # - {
+  #   name: flow_distill_res,
+  #   args: { weight: 0.005, beta: 1.0, gamma: 0.5 }
+  # }
+
+max_epoch: 200
+
+validate_every: 1
+save_every: 1
+vis_every: 10
+
+seed: 1234
+dist_url: env://
+test_before_train: false
+
+# Load the original BiM-VFI checkpoint for the frozen backbone.
+# The newly added bim_prior_predictor will be initialized from scratch.
+pretrained: save/bim_vfi_bimprior_only_bimprior_only_with_noweighted_bimloss_withbimfn/checkpoints/model_best.pth

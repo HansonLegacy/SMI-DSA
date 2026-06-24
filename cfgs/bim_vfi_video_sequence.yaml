@@ -1,0 +1,85 @@
+exp_name: video_sequence_pretrained_test_torch
+
+# 第一次实验的名称为video_sequence_pretrained
+mode: train
+
+model:
+  name: bim_vfi
+  args:
+    pyr_level: 3
+    feat_channels: 32
+    use_video_sequence_context: true
+    video_context_temporal_sigma: 2.0
+  freeze_modules: ["mfe", "cfe", "bimfn", "caun"]
+
+train_dataset:
+  name: video_sequence_folder
+  args:
+    root_path: /home/ppq5umrb/whcs-share46/LJX/3D_5_xiehe/3D_xiehe_noblack_seq/train_512
+    split: train
+    interp_num: 5
+    enumerate_all_targets: true
+    patch_size: 224
+    clip_length: 4
+    pad_to_clip_length: true
+    output_pair_fields: true
+    val_ratio: 0.05
+  loader:
+    batch_size: 24
+    num_workers: 4
+
+test_dataset:
+  name: video_sequence_folder
+  args:
+    root_path: /home/ppq5umrb/whcs-share46/LJX/3D_5_xiehe/3D_xiehe_noblack_seq/train_512
+    split: val
+    interp_num: 5
+    enumerate_all_targets: true
+    eval_size: [512, 512]
+    val_test_patch_mode: resize
+    clip_length: 4
+    pad_to_clip_length: true
+    output_pair_fields: true
+    val_ratio: 0.05
+  loader:
+    batch_size: 18
+    num_workers: 4
+  save_imgs: false
+
+optimizer:
+  name: adamW
+  args: { lr: 1.5e-4, weight_decay: 1.0e-4 }
+
+lr_scheduler:
+  name: one_cycle_lr
+  args:
+    max_lr: 5.0e-4
+    pct_start: 0.01
+    cycle_momentum: false
+    anneal_strategy: cos
+
+gradient_clip: 1
+
+loss:
+  - {
+    name: multiple_charbonnier,
+    args: { weight: 1, gamma: 0.25 }
+  }
+  - {
+    name: multiple_ternary,
+    args: { weight: 1, gamma: 0.25 }
+  }
+
+max_epoch: 400
+
+validate_every: 1
+save_every: 1
+vis_every: 100
+
+seed: 1234
+
+dist_url: env://
+
+test_before_train: false
+
+pretrained: pretrained/bim_vfi_finetune_3dxiehe_train_noblack_in5_ep1.pth

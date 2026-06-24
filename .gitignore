@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual Environment
+venv/
+.venv/
+env/
+.conda/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Model Weights & Pretrained
+pretrained/
+
+# Saved Models & Checkpoints
+save/
+
+# Research Articles & Notes
+000*/
+000 article/
+000sh/
+
+# Test Outputs
+test_outputs/
+test_seq/
+
+# Results
+unified_results_n3_p0/
+
+# Wandb
+wandb/
+*.wandb
+wandb.yaml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Misc
+*.log
+*.tmp

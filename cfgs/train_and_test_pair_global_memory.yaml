@@ -1,0 +1,235 @@
+exp_name: video_sequence_pair_global_memory_tat_ori_run_4gpu_with_all_modules_imgshowshow
+mode: train
+
+model:
+  name: bim_vfi
+  args:
+    # --------------------------------------------------------------------------
+    # Core backbone
+    # --------------------------------------------------------------------------
+    pyr_level: 3
+    feat_channels: 32
+
+    # --------------------------------------------------------------------------
+    # Teacher/KDVCF branch
+    # Default in code is true for backward compatibility with older configs.
+    # This experiment only uses reconstruction losses, so the teacher path is off.
+    # --------------------------------------------------------------------------
+    use_teacher_branch: false
+
+    # --------------------------------------------------------------------------
+    # Legacy pair-only BiM prior path
+    # Keep this off when using the MTMC conditioner below.
+    # --------------------------------------------------------------------------
+    use_bim_prior_predictor: false
+
+    # --------------------------------------------------------------------------
+    # Legacy sequence-context branch from the old video-sequence pipeline
+    # This is a separate path from LTCE / global memory and should stay off here.
+    # --------------------------------------------------------------------------
+    use_video_sequence_context: false
+
+    # --------------------------------------------------------------------------
+    # Local temporal context branch (LTCE)
+    # local_clip -> MFE/CFE -> LTCE -> motion_context_pyr + detail_context_pyr
+    # --------------------------------------------------------------------------
+    use_local_fine_context: true
+    use_ltce: true
+    use_local_motion_context_for_bim_prior: true
+    use_local_detail_context_for_sn: true
+    local_fine_context:
+      clip_length: 4
+      run_mfe_on_local_clip: true
+      run_cfe_on_local_clip: true
+      num_pyramid_levels: 3
+      encoder:
+        name: ltce
+        args:
+          feat_channels: 32
+          temporal_sigma: 2.0
+          channel_multipliers: [1, 2, 4]
+          coarse_shared_levels: [2]
+          fine_separate_levels: [0, 1]
+      share_coarse_parameters: true
+      coarse_shared_levels: [2]
+      fine_separate_levels: [0, 1]
+      motion_to_bim_prior: true
+      motion_to_mtmc: true
+      detail_to_sn: true
+
+    # --------------------------------------------------------------------------
+    # Global temporal memory branch
+    # Switch:
+    # - use_pair_global_memory: true  -> PairConditionedGlobalMemory
+    # - use_pair_global_memory: false -> legacy GTME below
+    # This top-level switch takes precedence over global_memory_context below.
+    # --------------------------------------------------------------------------
+    use_global_memory_context: true
+    use_gtme: true
+    use_pair_global_memory: true
+    use_global_memory_for_sn: true
+    global_memory_context:
+      source: sparse_anchors
+      use_pair_conditioned_memory: true
+      memory_to_sn: true
+      memory_to_mtmc: true
+      # Used only by legacy GTME when use_pair_global_memory is false.
+      local_window_size: 6
+
+    # Legacy fallback. This block is ignored when use_pair_global_memory is true.
+    global_memory_encoder:
+      name: gtme
+      args:
+        feat_channels: 32
+        local_window_size: 6
+        spatial_downsample_factor: 4
+
+    # New pair-conditioned global memory.
+    # C_motion is adapted to MTMC; C_structure is adapted to TCAR.
+    pair_global_memory:
+      name: pair_conditioned_global_memory
+      args:
+        image_channels: 3
+        channels: 256
+        n_motion: 2
+        n_structure: 4
+        r_motion: 4
+        r_structure: 4
+        downsample: 8
+        num_heads: 8
+        stage_layers: 2
+        temporal_layers: 2
+        mlp_ratio: 2.0
+        dropout: 0.0
+        # reader 的时间距离 bias 强度，越大越依赖近帧，越小越依赖远帧
+        lambda_motion: 0.2
+        lambda_structure: 0.2
+        use_motion_prior_head: false
+      adapter:
+        token_channels: 256
+        feat_channels: 32
+        channel_multipliers: [1, 2, 4]
+        # Fallback only: used when MTMC/TCAR are the legacy pyramid-interface
+        # classes. The token-interface classes below consume C_motion and
+        # structure_condition directly.
+        use_coordinate_mlp: false
+
+    # --------------------------------------------------------------------------
+    # Motion conditioner (MTMC)
+    # img0/img1 + pair features + LTCE motion + global motion memory -> r, phi
+    # --------------------------------------------------------------------------
+    use_mtmc: true
+    mtmc_hidden_channels: 32
+    mtmc_use_img_diff: true
+    mtmc_use_last_state: true
+    mtmc_use_local_motion_context: true
+    mtmc_use_global_context: true
+    mtmc_pretrained: null
+    freeze_mtmc: false
+    mtmc:
+      name: pair_global_memory_mtmc
+      args:
+        hidden_channels: 32
+        feat_channels: 32
+        global_token_channels: 256
+        token_init_zero: true
+        use_img_diff: true
+        use_state: true
+        use_local_motion_context: true
+        use_global_context: true
+
+    # --------------------------------------------------------------------------
+    # Reconstructor (TCAR)
+    # TCAR receives LTCE detail context + global structure memory.
+    # --------------------------------------------------------------------------
+    use_tcar: true
+    tcar:
+      name: pair_global_memory_tcar
+      args:
+        feat_channels: 32
+        global_token_channels: 256
+        token_init_zero: true
+
+  # freeze_modules: ["mfe", "cfe"]
+
+train_dataset:
+  name: video_sequence_global_context_folder
+  args:
+    root_path: /home/ppq5umrb/whcs-share46/LJX/3D_5_xiehe/3D_xiehe_noblack_seq/train_512
+    split: train
+    interp_num: 5
+    enumerate_all_targets: true
+    patch_size: 224
+    clip_length: 4
+    pad_to_clip_length: true
+    output_pair_fields: true
+    val_ratio: 0.05
+    global_context_source: sparse_anchors
+    global_context_max_frames: null
+    position_norm_mode: one_based
+    output_local_context_fields: true
+    output_sparse_sequence_fields: true
+  loader:
+    batch_size: 16
+    num_workers: 8
+
+test_dataset:
+  name: video_sequence_global_context_folder
+  args:
+    root_path: /home/ppq5umrb/whcs-share46/LJX/3D_5_xiehe/3D_xiehe_noblack_seq/train_512
+    split: val
+    interp_num: 5
+    enumerate_all_targets: true
+    eval_size: [512, 512]
+    val_test_patch_mode: resize
+    clip_length: 4
+    pad_to_clip_length: true
+    output_pair_fields: true
+    val_ratio: 0.05
+    global_context_source: sparse_anchors
+    global_context_max_frames: null
+    position_norm_mode: one_based
+    output_local_context_fields: true
+    output_sparse_sequence_fields: true
+  loader:
+    batch_size: 4
+    num_workers: 8
+  save_imgs: false
+
+optimizer:
+  name: adamW
+  args: { lr: 1.5e-4, weight_decay: 1.0e-4 }
+
+lr_scheduler:
+  name: one_cycle_lr
+  args:
+    max_lr: 5.0e-4
+    pct_start: 0.01
+    cycle_momentum: false
+    anneal_strategy: cos
+
+gradient_clip: 1
+
+loss:
+  - {
+    name: multiple_charbonnier,
+    args: { weight: 1, gamma: 0.25 }
+  }
+  - {
+    name: multiple_ternary,
+    args: { weight: 1, gamma: 0.25 }
+  }
+
+max_epoch: 400
+
+validate_every: 1
+save_every: 100
+vis_every: 100
+
+seed: 1234
+
+dist_url: env://
+
+test_before_train: true
+
+pretrained: /home/ppq5umrb/whcs-share46/LJX/BiM-VFI/pretrained/model_best.pth

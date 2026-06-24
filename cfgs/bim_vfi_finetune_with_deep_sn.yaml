@@ -1,0 +1,78 @@
+exp_name: FFF_finetune_xiehe_5_deep_sn
+mode: train
+
+model:
+  name: bim_vfi
+  args:
+    pyr_level: 3
+    feat_channels: 32
+    use_deep_synthesis: true
+  freeze_modules: ["mfe", "cfe", "bimfn", "caun"]
+
+train_dataset:
+  name: xiehe_5_datasplit
+  args:
+    root_path: /mnt/mydrive/data/0627_给超算数据集/脑血管疾病_3D_3/3D_5_xiehe/train
+    split: train
+    patch_size: 224
+  loader:
+    batch_size: 8
+    num_workers: 8
+
+test_dataset:
+  name: xiehe_5_datasplit
+  args:
+    root_path: /mnt/mydrive/data/0627_给超算数据集/脑血管疾病_3D_3/3D_5_xiehe/train
+    split: val
+  loader:
+    batch_size: 4
+    num_workers: 8
+  save_imgs: False
+
+optimizer:
+  name: adamW
+  args: { lr: 2.0e-5, weight_decay: 1.0e-4 }
+  param_groups:
+    - name: sn_new
+      prefixes: ["sn.conv_down4", "sn.supple", "sn.deep_up0", "sn.deep_up1"]
+      lr: 2.0e-4
+      weight_decay: 1.0e-4
+    - name: sn_reused
+      prefixes: ["sn.conv_down1", "sn.conv_down2", "sn.conv_down3", "sn.conv_up2", "sn.conv_up3", "sn.conv_out"]
+      lr: 2.0e-5
+      weight_decay: 1.0e-4
+
+lr_scheduler:
+  name: cosine_lr
+  args:
+    T_max: 20
+    eta_min: 1.0e-6
+
+gradient_clip: 1
+
+loss:
+  - {
+    name: multiple_charbonnier,
+    args: { weight: 0.5, gamma: 0.25 }
+  }
+  - {
+    name: multiple_ternary,
+    args: { weight: 1, gamma: 0.25 }
+  }
+  - {
+    name: photo_teacher,
+    args: { weight: 0.5, gamma: 0.25 }
+  }
+
+max_epoch: 20
+
+validate_every: 1
+save_every: 1
+vis_every: 10
+
+seed: 1234
+
+dist_url: env://
+
+pretrained: pretrained/bim_vfi_finetune_3dxiehe_train_noblack_in5_ep1.pth
+test_before_train: true

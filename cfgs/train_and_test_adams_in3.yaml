@@ -1,0 +1,188 @@
+exp_name: video_sequence_adams_in3_train_on_AdamS_unfreeze_ep1_in5_2
+mode: train
+
+model:
+  name: bim_vfi
+  args:
+    # --------------------------------------------------------------------------
+    # Core backbone
+    # --------------------------------------------------------------------------
+    pyr_level: 3
+    feat_channels: 32
+
+    # --------------------------------------------------------------------------
+    # Teacher/KDVCF branch
+    # Keep this off for the first ADAMS/DMSE/ASD smoke run.
+    # --------------------------------------------------------------------------
+    use_teacher_branch: false
+
+    # --------------------------------------------------------------------------
+    # Legacy pair-only / legacy sequence context paths
+    # These stay off in this config so the main route is:
+    # ADAMS -> DMSE -> BiMFN/CAUN -> ASD.
+    # --------------------------------------------------------------------------
+    use_bim_prior_predictor: false
+    use_video_sequence_context: false
+    use_local_fine_context: false
+    use_global_memory_context: false
+
+    # --------------------------------------------------------------------------
+    # ADAMS encoder
+    # Anatomical-Dynamic Anchor-aware Multi-scale Sequence Context Encoder.
+    # ADAMS reuses self.mfe/self.cfe as the Dynamic/Anatomical stems, so old
+    # pretrained mfe.* / cfe.* weights and freeze_modules still target the same
+    # canonical encoder weights.
+    # --------------------------------------------------------------------------
+    use_adams_encoder: true
+    adams_encoder:
+      name: adams
+      args:
+        feat_channels: 32
+        image_channels: 3
+        stem_image_channels: 3
+        channel_multipliers: [1, 2, 4]
+        min_stem_size: 8
+        near_window: 1
+        base_token_grid: 8
+        temporal_sigma: 2.0
+        lambda_dynamic: 0.75
+        lambda_anatomical: 0.25
+        mu_dynamic: 0.25
+        mu_anatomical: 0.25
+        squeeze_single_tau: false
+
+    # --------------------------------------------------------------------------
+    # DMSE motion-state estimator
+    # Replaces the legacy MTMC route in this experiment.
+    # --------------------------------------------------------------------------
+    use_dmse: true
+    dmse:
+      name: dmse
+      args:
+        hidden_channels: 32
+        feat_channels: 32
+        img_channels: 3
+        use_img_diff: true
+        use_state: true
+        use_dynamic_context: true
+        use_global_token_film: true
+        token_init_zero: true
+
+    # --------------------------------------------------------------------------
+    # ASD decoder
+    # Replaces the legacy TCAR route in this experiment.
+    # --------------------------------------------------------------------------
+    use_asd: true
+    asd:
+      name: asd
+      args:
+        feat_channels: 32
+
+  # Optional: freeze the canonical encoder stems while training ADAMS mixers,
+  # DMSE, and ASD adapters.
+  freeze_modules: []  # "mfe", "cfe", "bimfn"
+
+train_dataset:
+  name: video_sequence_global_context_folder
+  args:
+    root_path: /home/ppq5umrb/whcs-share46/LJX/3D_5_xiehe/3D_xiehe_noblack_seq/train_512
+    split: train
+    interp_num: 3
+    enumerate_all_targets: true
+    patch_size: 256
+    clip_length: 4
+    pad_to_clip_length: true
+    output_pair_fields: true
+    val_ratio: 0.05
+
+    # ADAMS consumes global_clip/global_frame_mask/global_anchor_indices.
+    global_context_source: sparse_anchors
+    global_context_max_frames: null
+    position_norm_mode: one_based
+
+    # target_local_position is emitted from this block and is preferred as tau.
+    output_local_context_fields: true
+    output_sparse_sequence_fields: true
+  loader:
+    batch_size: 12
+    num_workers: 12
+
+test_dataset:
+  name: video_sequence_global_context_folder
+  args:
+    root_path: /home/ppq5umrb/whcs-share46/LJX/3D_5_xiehe/3D_xiehe_noblack_seq/train_512
+    split: val
+    interp_num: 3
+    enumerate_all_targets: true
+    eval_size: [512, 512]
+    val_test_patch_mode: resize
+    clip_length: 4
+    pad_to_clip_length: true
+    output_pair_fields: true
+    val_ratio: 0.05
+
+    global_context_source: sparse_anchors
+    global_context_max_frames: null
+    position_norm_mode: one_based
+
+    output_local_context_fields: true
+    output_sparse_sequence_fields: true
+  loader:
+    batch_size: 8
+    num_workers: 4
+  save_imgs: false
+
+# optimizer:
+#   name: adamW
+#   args: { lr: 1.5e-4, weight_decay: 1.0e-4 }
+
+# lr_scheduler:
+#   name: one_cycle_lr
+#   args:
+#     max_lr: 5.0e-4
+#     pct_start: 0.01
+#     cycle_momentum: false
+#     anneal_strategy: cos
+
+
+optimizer:
+  name: adamW
+  args: { lr: 5.0e-5, weight_decay: 1.0e-4 }
+
+lr_scheduler:
+  name: one_cycle_lr
+  args:
+    max_lr: 8.0e-5
+    pct_start: 0.05
+    div_factor: 2.0
+    final_div_factor: 10.0
+    cycle_momentum: false
+    anneal_strategy: cos
+
+
+
+gradient_clip: 1
+
+loss:
+  - {
+    name: multiple_charbonnier,
+    args: { weight: 1, gamma: 0.25 }
+  }
+  - {
+    name: multiple_ternary,
+    args: { weight: 1, gamma: 0.25 }
+  }
+
+max_epoch: 400
+
+validate_every: 1
+save_every: 100
+vis_every: 100
+
+seed: 1234
+
+dist_url: env://
+
+test_before_train: true
+
+pretrained: /home/ppq5umrb/whcs-share46/LJX/BiM-VFI/pretrained/adams/adams_in3_ep1.pth

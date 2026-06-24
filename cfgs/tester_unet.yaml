@@ -1,0 +1,37 @@
+exp_name: FFF_finetune_xiehe_5_transunet_test
+mode: test
+
+gpu: 0
+
+# Set to 1 for local single-GPU testing; increase only when launching with torch.distributed.
+num_gpus: 1
+
+test_dataset:
+  name: xiehe_5_datasplit
+  args:
+    # Replace with the actual evaluation set path you want to use.
+    root_path: /mnt/mydrive/data/0627_缁忔’秴绠楁暟鐘荤‡€娉/鑲辨ˆ£…绠ｏ紤柧鐥卂3D_3/3D_5_xiehe/test
+    split: test
+  loader:
+    batch_size: 4
+    num_workers: 4
+  save_imgs: False
+
+models:
+  - name: bim_vfi
+    type: bimvfi
+    # Replace with your newly trained TransUNet checkpoint.
+    resume: pretrained/your_transunet_checkpoint.pth
+    args:
+      pyr_level: 3
+      feat_channels: 32
+      use_transunet: true
+      transunet_pretrained: pretrained/transunet/R50+ViT-B_16.npz
+
+test:
+  batch_size: 1
+  num_workers: 4
+  save_imgs: false
+  save_path: test_outputs
+
+seed: 1234

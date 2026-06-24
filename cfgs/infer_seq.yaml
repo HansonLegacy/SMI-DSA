@@ -1,0 +1,35 @@
+# Runtime config for infer_adams_sparse_sequence.py.
+# Usage:
+#   python infer_adams_sparse_sequence.py --cfg cfgs/infer_adams_dmse_asd_sparse_sequence.yaml
+
+# This yaml supplies the ADAMS/DMSE/ASD model definition and default pretrained path.
+# Set ckpt below to override the pretrained/resume path inside this model cfg.
+model_cfg: cfgs/train_and_test_adams_dmse_asd.yaml
+ckpt: pretrained\ADAMS_Best.pth
+
+# Directory containing one sparse sequence named as 1.png, 2.png, ...
+input_dir: test_seq
+
+# If output_dir is null, results are saved to: input_dir/output_subdir
+output_dir: null
+output_subdir: full_seq
+
+# Number of frames inserted between every adjacent sparse pair.
+interp_num: 5
+
+# Output frames are renamed as 1.png, 2.png, ...
+output_ext: .png
+strict_numbering: true
+overwrite: false
+
+device: auto
+fp16: false
+
+save_sparse_gif: true
+save_full_gif: true
+sparse_gif_name: sparse_seq.gif
+full_gif_name: full_seq.gif
+gif_fps: 8
+gif_max_size: 512
+
+metadata_name: meta.json
