@@ -140,7 +140,7 @@ If you find SMI-DSA useful, please consider citing:
                in Sparse-Sampling Digital Subtraction Angiography},
   author    = {Li, Jiaxuan and Zhang, Ruiheng and Zhao, Huangxuan and Du, Bo},
   journal   = {arXiv preprint},
-  year      = {2025}
+  year      = {2026}
 }
 ```
 
